@@ -1,0 +1,7 @@
+{
+  "name": "Gemini Fashion & Creative Suite",
+  "description": "A modern web application that uses Gemini API for virtual clothes try-on, image and video generation/editing, and real-time AI assistance. Upload your photo, describe your desired outfit, and see the magic happen. The app also includes advanced creative tools powered by Google's latest AI models.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

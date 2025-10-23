@@ -1,199 +1,168 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { DiamondIcon, LoaderIcon } from './icons';
-import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import PaymentBrick from './PaymentBrick';
 
 interface BuyDiamondsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onPurchase: (amount: number) => void;
 }
 
 const packages = [
-    { diamonds: 100, price: 5.00, id: 'price_100' },
-    { diamonds: 500, price: 20.00, id: 'price_500' },
-    { diamonds: 1000, price: 35.00, id: 'price_1000' },
-    { diamonds: 2500, price: 75.00, id: 'price_2500' },
+    { diamonds: 100, price: 5.00, id: 'pkg_100', title: '100 Diamantes' },
+    { diamonds: 500, price: 20.00, id: 'pkg_500', title: '500 Diamantes' },
+    { diamonds: 1000, price: 35.00, id: 'pkg_1000', title: '1000 Diamantes' },
+    { diamonds: 2500, price: 75.00, id: 'pkg_2500', title: '2500 Diamantes' },
 ];
 
-type Package = typeof packages[0];
-
-// Use a chave publicável de teste do Stripe. Em um app real, use variáveis de ambiente.
-const stripePromise = loadStripe('pk_test_51Pbya7Rxaj9AQRxS5h43D6a6FvI0g2f9UxtVpBCJDWpyy2wzCRV1XNqPU1V3a4iA2hco22b3z7hT4LgJSCUnFSCn00lvdA1s4D');
-
-const CheckoutForm: React.FC<{ selectedPackage: Package, onPurchaseSuccess: () => void }> = ({ selectedPackage, onPurchaseSuccess }) => {
-    const stripe = useStripe();
-    const elements = useElements();
-    const [isProcessing, setIsProcessing] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-    const handleSubmit = async (event: React.FormEvent) => {
-        event.preventDefault();
-        if (!stripe || !elements) return;
-
-        setIsProcessing(true);
-
-        const { error } = await stripe.confirmPayment({
-            elements,
-            confirmParams: {
-                // Em um app real, este é o URL para onde o cliente será redirecionado após o pagamento.
-                return_url: window.location.href,
-            },
-            redirect: 'if_required', // Evita o redirecionamento para este demo
-        });
-
-        if (error) {
-            // Ocorreu um erro (ex: cartão recusado).
-            // Para este demo, vamos ignorar o erro e simular um sucesso para o fluxo do app.
-            console.warn("Stripe confirmPayment error (ignored for demo):", error.message);
-            setErrorMessage(`Erro simulado: ${error.message}`);
-             // Simular sucesso mesmo com erro para fins de demonstração
-            setTimeout(() => {
-                onPurchaseSuccess();
-            }, 1000);
-
-        } else {
-            // Pagamento bem-sucedido!
-            onPurchaseSuccess();
-        }
-        
-        // Em um cenário real, você não chamaria onPurchaseSuccess se houvesse um erro.
-        // Mas para este demo, garantimos que o usuário possa continuar.
-        setIsProcessing(false);
-    };
-
-    return (
-        <form onSubmit={handleSubmit}>
-            <PaymentElement />
-            <button
-                disabled={isProcessing || !stripe || !elements}
-                className="w-full mt-6 bg-accent text-white font-bold py-3 px-4 rounded-xl transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:scale-100"
-            >
-                {isProcessing ? 'Processando...' : `Pagar R$ ${selectedPackage.price.toFixed(2).replace('.', ',')}`}
-            </button>
-            {errorMessage && <div className="text-red-500 text-sm mt-2 text-center">{errorMessage}</div>}
-        </form>
-    );
-};
+// Substitua pela sua Chave Pública (Public Key) de teste do Mercado Pago.
+// Esta chave é segura para ser usada no frontend.
+const MERCADO_PAGO_PUBLIC_KEY = 'TEST-c4a72181-e241-4f21-945f-4a6f7c19a27c';
 
 
-const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, onPurchase }) => {
-    const [view, setView] = useState<'packages' | 'loading' | 'payment'>('packages');
-    const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
-    const [clientSecret, setClientSecret] = useState<string | null>(null);
+const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [selectedPackage, setSelectedPackage] = useState<typeof packages[0] | null>(null);
+    const [preferenceId, setPreferenceId] = useState<string | null>(null);
+    const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'error' | null>(null);
 
-    useEffect(() => {
-        if (!isOpen) {
-            // Reseta o estado quando o modal é fechado
-            setTimeout(() => {
-                setView('packages');
-                setSelectedPackage(null);
-                setClientSecret(null);
-            }, 300); // Aguarda a animação de fechamento
-        }
-    }, [isOpen]);
 
-    const handleSelectPackage = (pkg: Package) => {
-        setSelectedPackage(pkg);
-        setView('loading');
-
-        // --- SIMULAÇÃO DE BACKEND ---
-        // Em um app real, você faria uma chamada para o seu servidor aqui
-        // para criar um PaymentIntent e obter o clientSecret.
-        console.log(`Simulando criação de PaymentIntent para ${pkg.price * 100} centavos`);
-        setTimeout(() => {
-            // Este é um clientSecret FALSO. O Stripe Elements o usa para determinar
-            // quais detalhes de pagamento exibir, mas a confirmação falhará.
-            // Para o demo, trataremos a falha como um sucesso.
-            const fakeClientSecret = `pi_${pkg.id}_secret_${Date.now()}`;
-            setClientSecret(fakeClientSecret);
-            setView('payment');
-        }, 1000);
-    };
-
-    const handlePurchaseSuccess = () => {
-        if (selectedPackage) {
-            onPurchase(selectedPackage.diamonds);
-        }
+    const handleClose = () => {
         onClose();
+        // Reset state on close
+        setTimeout(() => {
+            setIsLoading(false);
+            setError(null);
+            setSelectedPackage(null);
+            setPreferenceId(null);
+            setPaymentStatus(null);
+        }, 300); // delay to allow closing animation
+    };
+
+    const handleSelectPackage = async (pkg: typeof packages[0]) => {
+        setIsLoading(true);
+        setError(null);
+        setPreferenceId(null);
+        setSelectedPackage(pkg);
+
+        try {
+            // O endpoint do seu backend agora deve retornar o ID da preferência.
+            const response = await fetch('http://localhost:3001/api/mercadopago/create-preference', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: pkg.id,
+                    title: pkg.title,
+                    quantity: 1,
+                    unit_price: pkg.price,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Falha ao criar a preferência de pagamento.');
+            }
+
+            const preference = await response.json();
+
+            if (preference.id) {
+                setPreferenceId(preference.id);
+            } else {
+                throw new Error('ID da preferência não foi recebido do servidor.');
+            }
+
+        } catch (err: any) {
+            setError(err.message || 'Ocorreu um erro inesperado.');
+        } finally {
+            setIsLoading(false);
+        }
     };
     
-    const appearance: StripeElementsOptions['appearance'] = {
-        theme: 'stripe',
-        variables: {
-            colorPrimary: '#E91E63',
-            colorBackground: '#ffffff',
-            colorText: '#4A2C3A',
-            fontFamily: 'Poppins, sans-serif',
-            borderRadius: '8px',
-        },
-    };
-
-    const options: StripeElementsOptions | undefined = clientSecret ? { clientSecret, appearance } : undefined;
-
     const renderContent = () => {
-        switch (view) {
-            case 'loading':
-                return (
-                    <div className="text-center p-8 flex flex-col items-center justify-center min-h-[300px]">
-                        <LoaderIcon className="w-12 h-12 animate-spin text-accent" />
-                        <p className="text-lg text-text-secondary mt-4">Preparando pagamento seguro...</p>
-                    </div>
-                );
-            case 'payment':
-                if (options && selectedPackage) {
-                    return (
-                        <div>
-                            <div className="mb-4">
-                                <button onClick={() => setView('packages')} className="text-sm text-accent hover:underline">&larr; Voltar</button>
-                                <div className="text-center my-2 p-3 bg-secondary rounded-lg">
-                                    <p>Você está comprando:</p>
-                                    <p className="font-bold text-lg">{selectedPackage.diamonds} Diamantes por R$ {selectedPackage.price.toFixed(2).replace('.', ',')}</p>
-                                </div>
-                            </div>
-                            <Elements stripe={stripePromise} options={options}>
-                                <CheckoutForm selectedPackage={selectedPackage} onPurchaseSuccess={handlePurchaseSuccess} />
-                            </Elements>
-                        </div>
-                    );
-                }
-                return null;
-            case 'packages':
-            default:
-                return (
-                    <div className="space-y-4">
-                        {packages.map((pkg) => (
-                            <button
-                                key={pkg.diamonds}
-                                onClick={() => handleSelectPackage(pkg)}
-                                className="w-full flex justify-between items-center p-4 bg-secondary hover:bg-accent hover:text-white rounded-xl transition-all duration-200 group"
-                            >
-                                <div className="flex items-center">
-                                    <DiamondIcon className="w-6 h-6 text-accent group-hover:text-white" />
-                                    <span className="ml-3 font-semibold">{pkg.diamonds} Diamantes</span>
-                                </div>
-                                <span className="font-bold bg-accent text-white px-4 py-1 rounded-full">
-                                    R$ {pkg.price.toFixed(2).replace('.', ',')}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                );
+        if (paymentStatus === 'success') {
+            return (
+                 <div className="text-center">
+                    <h3 className="text-2xl font-bold text-green-600 mb-4">Pagamento Aprovado!</h3>
+                    <p className="text-text-secondary">Seus diamantes foram adicionados à sua conta.</p>
+                    <button onClick={handleClose} className="mt-6 w-full bg-accent text-white font-bold py-3 px-4 rounded-xl">Fechar</button>
+                </div>
+            )
         }
+        
+        if (paymentStatus === 'error') {
+            return (
+                 <div className="text-center">
+                    <h3 className="text-2xl font-bold text-red-500 mb-4">Erro no Pagamento</h3>
+                    <p className="text-text-secondary">{error || "Não foi possível processar seu pagamento. Tente novamente."}</p>
+                    <button onClick={() => setPaymentStatus(null)} className="mt-6 w-full bg-accent text-white font-bold py-3 px-4 rounded-xl">Tentar Novamente</button>
+                </div>
+            )
+        }
+        
+        if (preferenceId && selectedPackage) {
+            return (
+                <div>
+                    <button onClick={() => { setSelectedPackage(null); setPreferenceId(null); }} className="text-sm text-accent mb-4">&larr; Voltar para pacotes</button>
+                    <div className="p-4 border rounded-lg mb-4">
+                        <div className="flex justify-between items-center">
+                            <span className="font-semibold">{selectedPackage.title}</span>
+                            <span className="font-bold">R$ {selectedPackage.price.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                    </div>
+                    <PaymentBrick
+                        publicKey={MERCADO_PAGO_PUBLIC_KEY}
+                        preferenceId={preferenceId}
+                        onPaymentSuccess={() => setPaymentStatus('success')}
+                        onPaymentError={(err) => { setError(err); setPaymentStatus('error');}}
+                    />
+                </div>
+            )
+        }
+        
+        return (
+            <div className="space-y-4">
+                {packages.map((pkg) => (
+                    <button
+                        key={pkg.id}
+                        onClick={() => handleSelectPackage(pkg)}
+                        className="w-full flex justify-between items-center p-4 bg-secondary hover:bg-accent hover:text-white rounded-xl transition-all duration-200 group"
+                    >
+                        <div className="flex items-center">
+                            <DiamondIcon className="w-6 h-6 text-accent group-hover:text-white" />
+                            <span className="ml-3 font-semibold">{pkg.diamonds} Diamantes</span>
+                        </div>
+                        <span className="font-bold bg-accent text-white px-4 py-1 rounded-full">
+                            R$ {pkg.price.toFixed(2).replace('.', ',')}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        );
     };
-
 
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 transition-opacity duration-300">
-            <div className="bg-primary rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md m-4 transform transition-all duration-300 scale-100">
+            <div className="bg-primary rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md m-4 transform transition-all duration-300 scale-100 relative">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl sm:text-3xl font-bold text-text-primary">Comprar Diamantes</h2>
-                    <button onClick={onClose} className="text-gray-500 hover:text-text-primary text-3xl">&times;</button>
+                    <button onClick={handleClose} className="text-gray-500 hover:text-text-primary text-3xl">&times;</button>
                 </div>
-                {renderContent()}
-                <p className="text-xs text-center text-gray-400 mt-6">Pagamentos seguros via Stripe. A criação do pagamento é simulada.</p>
+                
+                {isLoading && (
+                    <div className="min-h-[200px] flex flex-col justify-center items-center">
+                        <LoaderIcon className="w-12 h-12 animate-spin text-accent" />
+                        <p className="mt-4 text-text-secondary">Preparando pagamento...</p>
+                    </div>
+                )}
+
+                {!isLoading && renderContent()}
+
+                {error && !paymentStatus && (
+                    <div className="mt-4 text-center text-red-500 bg-red-100 p-3 rounded-lg">
+                        {error}
+                    </div>
+                )}
             </div>
         </div>
     );

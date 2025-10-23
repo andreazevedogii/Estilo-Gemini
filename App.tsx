@@ -16,10 +16,6 @@ const App: React.FC = () => {
     setDiamondBalance(prev => Math.max(0, prev - cost));
   };
   
-  const handleAddDiamonds = (amount: number) => {
-    setDiamondBalance(prev => prev + amount);
-  };
-
   const renderPage = () => {
     const commonProps = {
         diamondBalance,
@@ -57,7 +53,6 @@ const App: React.FC = () => {
       <BuyDiamondsModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onPurchase={handleAddDiamonds}
       />
     </div>
   );

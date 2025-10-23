@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { DiamondIcon, LoaderIcon } from './icons';
-import PaymentBrick from './PaymentBrick';
 
 interface BuyDiamondsModalProps {
     isOpen: boolean;
@@ -14,130 +13,125 @@ const packages = [
     { diamonds: 2500, price: 75.00, id: 'pkg_2500', title: '2500 Diamantes' },
 ];
 
-// Substitua pela sua Chave Pública (Public Key) de teste do Mercado Pago.
-// Esta chave é segura para ser usada no frontend.
-const MERCADO_PAGO_PUBLIC_KEY = 'TEST-c4a72181-e241-4f21-945f-4a6f7c19a27c';
-
+interface PixData {
+    qrCode: string;
+    copyPaste: string;
+}
 
 const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedPackage, setSelectedPackage] = useState<typeof packages[0] | null>(null);
-    const [preferenceId, setPreferenceId] = useState<string | null>(null);
-    const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'error' | null>(null);
-
+    const [pixData, setPixData] = useState<PixData | null>(null);
+    const [copied, setCopied] = useState(false);
 
     const handleClose = () => {
+        if (isLoading) return;
         onClose();
         // Reset state on close
         setTimeout(() => {
-            setIsLoading(false);
             setError(null);
-            setSelectedPackage(null);
-            setPreferenceId(null);
-            setPaymentStatus(null);
-        }, 300); // delay to allow closing animation
+            setPixData(null);
+        }, 300);
     };
 
     const handleSelectPackage = async (pkg: typeof packages[0]) => {
         setIsLoading(true);
         setError(null);
-        setPreferenceId(null);
-        setSelectedPackage(pkg);
+        setPixData(null);
 
         try {
-            // O endpoint do seu backend agora deve retornar o ID da preferência.
-            const response = await fetch('http://localhost:3001/api/mercadopago/create-preference', {
+            const response = await fetch('http://localhost:3001/api/abacatepay/create-payment-link', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     id: pkg.id,
                     title: pkg.title,
-                    quantity: 1,
                     unit_price: pkg.price,
+                    userId: 'user_123', // Hardcoded for demonstration. In a real app, this would be the logged-in user's ID.
                 }),
             });
 
             if (!response.ok) {
-                throw new Error('Falha ao criar a preferência de pagamento.');
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Falha ao gerar o PIX. Status: ${response.status}`);
             }
 
-            const preference = await response.json();
+            const data = await response.json();
 
-            if (preference.id) {
-                setPreferenceId(preference.id);
+            if (data.pixQrCodeBase64 && data.pixCopyPaste) {
+                // Received PIX data, show it.
+                setPixData({ qrCode: data.pixQrCodeBase64, copyPaste: data.pixCopyPaste });
             } else {
-                throw new Error('ID da preferência não foi recebido do servidor.');
+                throw new Error('Dados PIX não recebidos do servidor.');
             }
 
         } catch (err: any) {
-            setError(err.message || 'Ocorreu um erro inesperado.');
+            console.error(err);
+            setError(err.message || 'Ocorreu um erro inesperado. Verifique se o backend está rodando.');
         } finally {
             setIsLoading(false);
         }
     };
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
     
-    const renderContent = () => {
-        if (paymentStatus === 'success') {
-            return (
-                 <div className="text-center">
-                    <h3 className="text-2xl font-bold text-green-600 mb-4">Pagamento Aprovado!</h3>
-                    <p className="text-text-secondary">Seus diamantes foram adicionados à sua conta.</p>
-                    <button onClick={handleClose} className="mt-6 w-full bg-accent text-white font-bold py-3 px-4 rounded-xl">Fechar</button>
-                </div>
-            )
-        }
-        
-        if (paymentStatus === 'error') {
-            return (
-                 <div className="text-center">
-                    <h3 className="text-2xl font-bold text-red-500 mb-4">Erro no Pagamento</h3>
-                    <p className="text-text-secondary">{error || "Não foi possível processar seu pagamento. Tente novamente."}</p>
-                    <button onClick={() => setPaymentStatus(null)} className="mt-6 w-full bg-accent text-white font-bold py-3 px-4 rounded-xl">Tentar Novamente</button>
-                </div>
-            )
-        }
-        
-        if (preferenceId && selectedPackage) {
-            return (
-                <div>
-                    <button onClick={() => { setSelectedPackage(null); setPreferenceId(null); }} className="text-sm text-accent mb-4">&larr; Voltar para pacotes</button>
-                    <div className="p-4 border rounded-lg mb-4">
-                        <div className="flex justify-between items-center">
-                            <span className="font-semibold">{selectedPackage.title}</span>
-                            <span className="font-bold">R$ {selectedPackage.price.toFixed(2).replace('.', ',')}</span>
-                        </div>
-                    </div>
-                    <PaymentBrick
-                        publicKey={MERCADO_PAGO_PUBLIC_KEY}
-                        preferenceId={preferenceId}
-                        onPaymentSuccess={() => setPaymentStatus('success')}
-                        onPaymentError={(err) => { setError(err); setPaymentStatus('error');}}
-                    />
-                </div>
-            )
-        }
-        
+    const renderPixDisplay = () => {
+        if (!pixData) return null;
         return (
-            <div className="space-y-4">
-                {packages.map((pkg) => (
-                    <button
-                        key={pkg.id}
-                        onClick={() => handleSelectPackage(pkg)}
-                        className="w-full flex justify-between items-center p-4 bg-secondary hover:bg-accent hover:text-white rounded-xl transition-all duration-200 group"
-                    >
-                        <div className="flex items-center">
-                            <DiamondIcon className="w-6 h-6 text-accent group-hover:text-white" />
-                            <span className="ml-3 font-semibold">{pkg.diamonds} Diamantes</span>
-                        </div>
-                        <span className="font-bold bg-accent text-white px-4 py-1 rounded-full">
-                            R$ {pkg.price.toFixed(2).replace('.', ',')}
-                        </span>
-                    </button>
-                ))}
+            <div className="text-center">
+                <h3 className="text-lg font-semibold text-text-primary mb-2">Pague com PIX</h3>
+                <p className="text-sm text-text-secondary mb-4">Aponte a câmera do seu celular para o QR Code ou use o "Copia e Cola".</p>
+                <img 
+                    src={`data:image/png;base64,${pixData.qrCode}`} 
+                    alt="PIX QR Code" 
+                    className="mx-auto w-48 h-48 rounded-lg bg-white p-2 shadow-md"
+                />
+                <div className="mt-4">
+                    <label className="text-xs text-text-secondary">PIX Copia e Cola:</label>
+                    <div className="flex items-center mt-1">
+                        <input 
+                            type="text" 
+                            readOnly 
+                            value={pixData.copyPaste} 
+                            className="w-full bg-secondary p-2 rounded-l-md text-xs text-text-primary truncate"
+                        />
+                        <button 
+                            onClick={() => copyToClipboard(pixData.copyPaste)}
+                            className="bg-accent text-white px-3 py-2 rounded-r-md text-xs font-bold hover:bg-accent-hover w-20"
+                        >
+                            {copied ? 'Copiado!' : 'Copiar'}
+                        </button>
+                    </div>
+                </div>
+                 <p className="text-xs text-text-secondary mt-6">Após o pagamento, seus diamantes serão creditados automaticamente. Você pode fechar esta janela.</p>
             </div>
         );
     };
+
+    const renderPackageSelection = () => (
+        <div className="space-y-4">
+            {packages.map((pkg) => (
+                <button
+                    key={pkg.id}
+                    onClick={() => handleSelectPackage(pkg)}
+                    className="w-full flex justify-between items-center p-4 bg-secondary hover:bg-accent hover:text-white rounded-xl transition-all duration-200 group"
+                >
+                    <div className="flex items-center">
+                        <DiamondIcon className="w-6 h-6 text-accent group-hover:text-white" />
+                        <span className="ml-3 font-semibold">{pkg.diamonds} Diamantes</span>
+                    </div>
+                    <span className="font-bold bg-accent text-white px-4 py-1 rounded-full">
+                        R$ {pkg.price.toFixed(2).replace('.', ',')}
+                    </span>
+                </button>
+            ))}
+        </div>
+    );
 
     if (!isOpen) return null;
 
@@ -145,23 +139,26 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) 
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 transition-opacity duration-300">
             <div className="bg-primary rounded-2xl shadow-2xl p-6 sm:p-8 w-full max-w-md m-4 transform transition-all duration-300 scale-100 relative">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-text-primary">Comprar Diamantes</h2>
-                    <button onClick={handleClose} className="text-gray-500 hover:text-text-primary text-3xl">&times;</button>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-text-primary">
+                        {pixData ? 'Pagamento PIX' : 'Comprar Diamantes'}
+                    </h2>
+                    <button onClick={handleClose} className="text-gray-500 hover:text-text-primary text-3xl disabled:opacity-50" disabled={isLoading}>&times;</button>
                 </div>
                 
-                {isLoading && (
+                {isLoading ? (
                     <div className="min-h-[200px] flex flex-col justify-center items-center">
                         <LoaderIcon className="w-12 h-12 animate-spin text-accent" />
-                        <p className="mt-4 text-text-secondary">Preparando pagamento...</p>
+                        <p className="mt-4 text-text-secondary">Gerando PIX...</p>
                     </div>
-                )}
-
-                {!isLoading && renderContent()}
-
-                {error && !paymentStatus && (
-                    <div className="mt-4 text-center text-red-500 bg-red-100 p-3 rounded-lg">
-                        {error}
-                    </div>
+                ) : (
+                    <>
+                        {pixData ? renderPixDisplay() : renderPackageSelection()}
+                        {error && (
+                            <div className="mt-4 text-center text-red-500 bg-red-100 p-3 rounded-lg">
+                                {error}
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>

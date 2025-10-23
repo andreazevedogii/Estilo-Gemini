@@ -4,6 +4,7 @@ import { DiamondIcon, LoaderIcon } from './icons';
 interface BuyDiamondsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    onPurchaseComplete: (diamonds: number) => void;
 }
 
 const packages = [
@@ -18,7 +19,7 @@ interface PixData {
     copyPaste: string;
 }
 
-const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) => {
+const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, onPurchaseComplete }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pixData, setPixData] = useState<PixData | null>(null);
@@ -38,36 +39,36 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) 
         setIsLoading(true);
         setError(null);
         setPixData(null);
-
+        
         try {
+            // NOTE: This assumes the backend server from `server.js` is running on localhost:3001
             const response = await fetch('http://localhost:3001/api/abacatepay/create-payment-link', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
                 body: JSON.stringify({
                     id: pkg.id,
                     title: pkg.title,
                     unit_price: pkg.price,
-                    userId: 'user_123', // Hardcoded for demonstration. In a real app, this would be the logged-in user's ID.
+                    userId: 'user_123', // Using a default user ID for this demonstration
                 }),
             });
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || `Falha ao gerar o PIX. Status: ${response.status}`);
+                throw new Error(errorData.error || `Erro ${response.status}: Falha ao gerar o código PIX.`);
             }
 
             const data = await response.json();
 
-            if (data.pixQrCodeBase64 && data.pixCopyPaste) {
-                // Received PIX data, show it.
-                setPixData({ qrCode: data.pixQrCodeBase64, copyPaste: data.pixCopyPaste });
-            } else {
-                throw new Error('Dados PIX não recebidos do servidor.');
-            }
+            setPixData({
+                qrCode: data.pixQrCodeBase64,
+                copyPaste: data.pixCopyPaste,
+            });
 
         } catch (err: any) {
-            console.error(err);
-            setError(err.message || 'Ocorreu um erro inesperado. Verifique se o backend está rodando.');
+            setError(err.message || 'Ocorreu um erro desconhecido ao se comunicar com o servidor.');
         } finally {
             setIsLoading(false);
         }
@@ -108,7 +109,10 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) 
                         </button>
                     </div>
                 </div>
-                 <p className="text-xs text-text-secondary mt-6">Após o pagamento, seus diamantes serão creditados automaticamente. Você pode fechar esta janela.</p>
+                 <div className="text-sm text-green-700 bg-green-100 p-3 rounded-md mt-6">
+                    <p className="font-semibold">Aguardando confirmação de pagamento...</p>
+                    <p className="text-xs mt-1">Seu saldo será atualizado automaticamente assim que o pagamento for confirmado. Você pode fechar esta janela.</p>
+                 </div>
             </div>
         );
     };
@@ -142,10 +146,10 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose }) 
                     <h2 className="text-2xl sm:text-3xl font-bold text-text-primary">
                         {pixData ? 'Pagamento PIX' : 'Comprar Diamantes'}
                     </h2>
-                    <button onClick={handleClose} className="text-gray-500 hover:text-text-primary text-3xl disabled:opacity-50" disabled={isLoading}>&times;</button>
+                    <button onClick={handleClose} className="text-gray-500 hover:text-text-primary text-3xl disabled:opacity-50" disabled={isLoading && !pixData}>&times;</button>
                 </div>
                 
-                {isLoading ? (
+                {isLoading && !pixData ? (
                     <div className="min-h-[200px] flex flex-col justify-center items-center">
                         <LoaderIcon className="w-12 h-12 animate-spin text-accent" />
                         <p className="mt-4 text-text-secondary">Gerando PIX...</p>

@@ -15,6 +15,14 @@ const App: React.FC = () => {
   const handleSpendDiamonds = (cost: number) => {
     setDiamondBalance(prev => Math.max(0, prev - cost));
   };
+
+  const handlePurchaseComplete = (diamonds: number) => {
+    setDiamondBalance(prev => prev + diamonds);
+    // Optionally close the modal after a delay
+    setTimeout(() => {
+        setIsModalOpen(false);
+    }, 2000);
+  };
   
   const renderPage = () => {
     const commonProps = {
@@ -53,6 +61,7 @@ const App: React.FC = () => {
       <BuyDiamondsModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onPurchaseComplete={handlePurchaseComplete}
       />
     </div>
   );

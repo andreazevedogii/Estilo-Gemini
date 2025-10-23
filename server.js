@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -6,12 +7,21 @@ const axios = require('axios');
 const app = express();
 const port = 3001;
 
-// --- CONFIGURAÇÃO DAS CHAVES DO ABACATE PAY ---
-// ATENÇÃO: Substitua pelos seus valores reais de produção antes de publicar.
-const ABACATE_API_KEY = 'abc_dev_xjcneqKFpFwAU6bE3pM2TP4f';
-// Chave PÚBLICA para verificação da assinatura do webhook HMAC, conforme a documentação.
-const ABACATEPAY_PUBLIC_KEY = "t9dXRhHHo3yDEj5pVDYz0frf7q6bMKyMRmxxCPIPp3RCplBfXRxqlC6ZpiWmOqj4L63qEaeUOtrCI8P0VMUgo6iIga2ri9ogaHFs0WIIywSMg0q7RmBfybe1E5XJcfC4IW3alNqym0tXoAKkzvfEjZxV6bE0oG2zJrNNYmUCKZyV0KZ3JS8Votf9EAWWYdiDkMkpbMdPggfh1EqHlVkMiTady6jOR3hyzGEHrIz2Ret0xHKMbiqkr9HS1JhNHDX9";
+// --- CONFIGURAÇÃO DAS CHAVES DO ABACATE PAY (CARREGADAS DO ARQUIVO .env) ---
+const ABACATE_API_KEY = process.env.ABACATE_API_KEY;
+const ABACATEPAY_PUBLIC_KEY = process.env.ABACATEPAY_PUBLIC_KEY;
 const ABACATE_API_URL = 'https://api.abacatepay.com/v1';
+
+// Validação inicial para garantir que as chaves foram configuradas
+if (!ABACATE_API_KEY || !ABACATEPAY_PUBLIC_KEY) {
+    console.error("\n[ERRO CRÍTICO] As variáveis de ambiente ABACATE_API_KEY e ABACATEPAY_PUBLIC_KEY não foram definidas.");
+    console.error("1. Crie um arquivo chamado '.env' na raiz do projeto.");
+    console.error("2. Copie o conteúdo de '.env.example' para o novo arquivo '.env'.");
+    console.error("3. Preencha o arquivo '.env' com suas chaves reais da Abacate Pay.");
+    console.error("O servidor não pode iniciar sem as chaves.\n");
+    process.exit(1); // Encerra o processo se as chaves não estiverem configuradas
+}
+
 
 // --- SIMULAÇÃO DE BANCO DE DADOS ---
 const diamondPackages = {
@@ -38,7 +48,7 @@ app.use(express.json({
 }));
 
 
-// Rota para criar um link de pagamento (checkout)
+// Rota para criar um PIX QR Code
 app.post('/api/abacatepay/create-payment-link', async (req, res) => {
     const { id, title, unit_price, userId } = req.body;
 
@@ -47,30 +57,31 @@ app.post('/api/abacatepay/create-payment-link', async (req, res) => {
     }
 
     try {
-        // Payload modificado para solicitar um pagamento PIX diretamente.
-        // Removido success_url e cancel_url para indicar que não queremos um fluxo de redirecionamento.
         const payload = {
-            method: 'PIX', 
-            amount: Math.round(Number(unit_price) * 100), // Valor em centavos
-            description: title,
-            metadata: { package_id: id, userId: userId }, // Metadados importantes para o webhook
+            amount: Math.round(Number(unit_price) * 100),
+            description: `Compra de ${title} no Estilo Gemini`,
+            customer: {
+                name: "Cliente Estilo Gemini",
+                email: `user+${userId}@example.com`,
+                taxId: "999.999.999-99"
+            },
+            metadata: { package_id: id, userId: userId },
         };
 
-        const response = await axios.post(`${ABACATE_API_URL}/payments`, payload, {
+        const response = await axios.post(`${ABACATE_API_URL}/pixQrCode/create`, payload, {
             headers: {
                 'Authorization': `Bearer ${ABACATE_API_KEY}`,
                 'Content-Type': 'application/json'
             }
         });
         
-        // A API para PIX deve retornar os dados para exibição do QR Code.
-        // As propriedades exatas podem variar (ex: qr_code, copy_paste_key, etc.)
-        // Assumimos nomes comuns baseados em outras APIs.
-        const pixQrCodeBase64 = response.data.pix_qr_code_image_base64;
-        const pixCopyPaste = response.data.pix_copy_paste_code;
+        console.log('Resposta da API Abacate Pay (/pixQrCode/create):', JSON.stringify(response.data, null, 2));
+        
+        const pixQrCodeBase64 = response.data.imageBase64;
+        const pixCopyPaste = response.data.copyPaste;
 
         if (!pixQrCodeBase64 || !pixCopyPaste) {
-            console.error('Resposta da API do Abacate Pay não contém dados PIX esperados:', response.data);
+            console.error('Resposta da API do Abacate Pay não contém os campos esperados (imageBase64, copyPaste):', response.data);
             return res.status(500).json({ error: 'Resposta inválida da API de pagamento ao gerar PIX.' });
         }
 
@@ -78,19 +89,37 @@ app.post('/api/abacatepay/create-payment-link', async (req, res) => {
         res.json({ pixQrCodeBase64, pixCopyPaste });
 
     } catch (error) {
-        console.error('Erro ao gerar PIX no Abacate Pay:', error.response ? error.response.data : error.message);
-        res.status(500).json({ error: 'Falha ao comunicar com o Abacate Pay para gerar PIX.' });
+        console.error('Erro detalhado ao gerar PIX no Abacate Pay:');
+        let errorMessage = 'Falha na comunicação com o provedor de pagamento.';
+        let statusCode = 500;
+
+        if (error.response) {
+            console.error('Data:', JSON.stringify(error.response.data, null, 2));
+            console.error('Status:', error.response.status);
+            
+            const apiError = error.response.data?.error || error.response.data?.message;
+            if (apiError) {
+                errorMessage = `Erro do Provedor: ${apiError}`;
+            }
+            statusCode = error.response.status;
+        } else if (error.request) {
+            console.error('Request:', 'Nenhuma resposta recebida do servidor da Abacate Pay.');
+            errorMessage = 'Não foi possível conectar ao provedor de pagamento. Verifique a conexão de rede.';
+        } else {
+            console.error('Error', error.message);
+            errorMessage = error.message;
+        }
+        res.status(statusCode).json({ error: errorMessage });
     }
 });
 
-// Endpoint para receber webhooks do Abacate Pay, conforme documentação
+// Endpoint para receber webhooks do Abacate Pay
 app.post('/webhook/abacatepay', (req, res) => {
     const signatureFromHeader = req.headers['x-webhook-signature'];
     
     console.log('\n--- Webhook Recebido ---');
     console.log('Timestamp:', new Date().toISOString());
-    console.log('Cabeçalhos:', req.headers);
-    console.log('Corpo Bruto:', req.rawBody.toString('utf8'));
+    console.log('Corpo:', JSON.stringify(req.body));
     
     if (!signatureFromHeader) {
         console.warn('Webhook recebido sem o cabeçalho X-Webhook-Signature.');
@@ -98,7 +127,6 @@ app.post('/webhook/abacatepay', (req, res) => {
     }
     
     try {
-        // Lógica de verificação HMAC-SHA256 conforme a documentação
         const expectedSignature = crypto
             .createHmac("sha256", ABACATEPAY_PUBLIC_KEY)
             .update(req.rawBody)
@@ -109,9 +137,8 @@ app.post('/webhook/abacatepay', (req, res) => {
         if (signatureIsValid) {
             console.log('Assinatura do webhook do Abacate Pay verificada com sucesso!');
             const event = req.body;
-            console.log(`Evento recebido: ${event.event}`); // ex: 'billing.paid'
+            console.log(`Evento recebido: ${event.event}`);
             
-            // --- LÓGICA DE NEGÓCIO REAL ---
             if (event.event === 'billing.paid') {
               const paymentData = event.data?.payment;
               const { package_id, userId } = paymentData?.metadata || {};
@@ -134,14 +161,13 @@ app.post('/webhook/abacatepay', (req, res) => {
                   console.error(`ERRO: Usuário (${userId}) ou pacote (${package_id}) não encontrado nos dados do webhook.`);
               }
             }
-            // -----------------------------------------
 
             res.sendStatus(200);
         } else {
             console.warn('Falha na verificação da assinatura do webhook. Assinatura recebida != Assinatura esperada.');
             console.log('Recebida:', signatureFromHeader);
             console.log('Esperada:', expectedSignature);
-            res.sendStatus(403); // Forbidden, pois a assinatura é inválida
+            res.sendStatus(403);
         }
     } catch (error) {
         console.error('Erro ao processar webhook:', error);

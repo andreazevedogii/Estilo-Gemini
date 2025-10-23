@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DiamondIcon, LoaderIcon } from './icons';
 
 interface BuyDiamondsModalProps {
@@ -23,22 +23,35 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pixData, setPixData] = useState<PixData | null>(null);
+    const [selectedPackage, setSelectedPackage] = useState<(typeof packages)[0] | null>(null);
     const [copied, setCopied] = useState(false);
+
+    const resetModalState = () => {
+        setIsLoading(false);
+        setError(null);
+        setPixData(null);
+        setCopied(false);
+        setSelectedPackage(null);
+    };
+
+    // Reset state when the modal is closed from the parent
+    useEffect(() => {
+        if (!isOpen) {
+            setTimeout(resetModalState, 300); // Allow closing animation
+        }
+    }, [isOpen]);
+
 
     const handleClose = () => {
         if (isLoading) return;
         onClose();
-        // Reset state on close
-        setTimeout(() => {
-            setError(null);
-            setPixData(null);
-        }, 300);
     };
 
     const handleSelectPackage = async (pkg: typeof packages[0]) => {
         setIsLoading(true);
         setError(null);
         setPixData(null);
+        setSelectedPackage(pkg);
         
         try {
             // NOTE: This assumes the backend server from `server.js` is running on localhost:3001
@@ -80,6 +93,12 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
             setTimeout(() => setCopied(false), 2000);
         });
     };
+
+    const handleSimulateConfirmation = () => {
+        if (selectedPackage) {
+            onPurchaseComplete(selectedPackage.diamonds);
+        }
+    };
     
     const renderPixDisplay = () => {
         if (!pixData) return null;
@@ -88,7 +107,7 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
                 <h3 className="text-lg font-semibold text-text-primary mb-2">Pague com PIX</h3>
                 <p className="text-sm text-text-secondary mb-4">Aponte a câmera do seu celular para o QR Code ou use o "Copia e Cola".</p>
                 <img 
-                    src={`data:image/png;base64,${pixData.qrCode}`} 
+                    src={pixData.qrCode} 
                     alt="PIX QR Code" 
                     className="mx-auto w-48 h-48 rounded-lg bg-white p-2 shadow-md"
                 />
@@ -109,10 +128,16 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
                         </button>
                     </div>
                 </div>
-                 <div className="text-sm text-green-700 bg-green-100 p-3 rounded-md mt-6">
-                    <p className="font-semibold">Aguardando confirmação de pagamento...</p>
-                    <p className="text-xs mt-1">Seu saldo será atualizado automaticamente assim que o pagamento for confirmado. Você pode fechar esta janela.</p>
+                 <div className="text-sm text-blue-800 bg-blue-100 p-3 rounded-md mt-6 text-left">
+                    <p className="font-semibold">Aviso do Desenvolvedor:</p>
+                    <p className="text-xs mt-1">Neste ambiente, o servidor da Abacate Pay não pode notificar nosso servidor local sobre o pagamento. Clique no botão abaixo para simular a confirmação e receber seus diamantes.</p>
                  </div>
+                 <button 
+                    onClick={handleSimulateConfirmation}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl mt-4"
+                >
+                    Simular Pagamento Confirmado
+                </button>
             </div>
         );
     };

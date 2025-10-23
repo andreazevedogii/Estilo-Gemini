@@ -77,11 +77,11 @@ app.post('/api/abacatepay/create-payment-link', async (req, res) => {
         
         console.log('Resposta da API Abacate Pay (/pixQrCode/create):', JSON.stringify(response.data, null, 2));
         
-        const pixQrCodeBase64 = response.data.imageBase64;
-        const pixCopyPaste = response.data.copyPaste;
+        const pixQrCodeBase64 = response.data.data.brCodeBase64;
+        const pixCopyPaste = response.data.data.brCode;
 
         if (!pixQrCodeBase64 || !pixCopyPaste) {
-            console.error('Resposta da API do Abacate Pay não contém os campos esperados (imageBase64, copyPaste):', response.data);
+            console.error('Resposta da API do Abacate Pay não contém os campos esperados (data.brCodeBase64, data.brCode):', response.data);
             return res.status(500).json({ error: 'Resposta inválida da API de pagamento ao gerar PIX.' });
         }
 
@@ -165,8 +165,8 @@ app.post('/webhook/abacatepay', (req, res) => {
             res.sendStatus(200);
         } else {
             console.warn('Falha na verificação da assinatura do webhook. Assinatura recebida != Assinatura esperada.');
-            console.log('Recebida:', signatureFromHeader);
-            console.log('Esperada:', expectedSignature);
+            console.log('-> Assinatura Recebida (do Header):', signatureFromHeader);
+            console.log('-> Assinatura Calculada (Esperada):', expectedSignature);
             res.sendStatus(403);
         }
     } catch (error) {

@@ -1,13 +1,13 @@
 {
   "name": "gemini-style-suite",
   "version": "1.0.0",
-  "description": "A modern web application that uses Gemini API for virtual clothes try-on, creative generation, and real-time AI assistance.",
-  "type": "module",
+  "description": "A modern web application that uses the Gemini API for virtual clothes try-on.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server.js"
+    "start": "node server.js",
+    "dev:full": "concurrently \"npm run dev\" \"npm run start\""
   },
   "dependencies": {
     "@google/genai": "^1.26.0",
@@ -22,6 +22,7 @@
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
     "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.2",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
   }

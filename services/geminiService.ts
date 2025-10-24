@@ -1,8 +1,54 @@
-import { GoogleGenAI, Modality, Type } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { fileToBase64 } from "../utils/fileUtils";
-import { AspectRatio } from '../types';
+// FIX: Import AspectRatio type
+import { AspectRatio } from "../types";
 
 const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+
+// FIX: Add generateImage function for ImageStudio component
+export const generateImage = async (
+    prompt: string,
+    aspectRatio: AspectRatio
+): Promise<string | null> => {
+    const ai = getAiClient();
+    const response = await ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+            numberOfImages: 1,
+            outputMimeType: 'image/jpeg',
+            aspectRatio: aspectRatio,
+        },
+    });
+    return response.generatedImages?.[0]?.image.imageBytes ?? null;
+};
+
+// FIX: Add editImage function for ImageStudio component
+export const editImage = async (
+    imageFile: File,
+    prompt: string
+): Promise<string | null> => {
+    const ai = getAiClient();
+    const imageBase64 = await fileToBase64(imageFile);
+    
+    const imagePart = {
+        inlineData: {
+            mimeType: imageFile.type,
+            data: imageBase64,
+        },
+    };
+    const textPart = { text: prompt };
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: { parts: [imagePart, textPart] },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
+    });
+
+    return response.candidates?.[0]?.content?.parts[0]?.inlineData?.data ?? null;
+};
 
 
 export const generateFashionImage = async (
@@ -44,55 +90,26 @@ export const generateFashionImage = async (
     return response.text;
 };
 
-export const generateImage = async (prompt: string, aspectRatio: AspectRatio): Promise<string | null> => {
-    const ai = getAiClient();
-    const response = await ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
-        prompt: prompt,
-        config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/jpeg',
-            aspectRatio: aspectRatio,
-        },
-    });
-    return response.generatedImages?.[0]?.image?.imageBytes ?? null;
-};
-
-export const editImage = async (file: File, prompt: string): Promise<string | null> => {
-    const ai = getAiClient();
-    const imageBase64 = await fileToBase64(file);
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-            parts: [
-                { inlineData: { data: imageBase64, mimeType: file.type } },
-                { text: prompt },
-            ],
-        },
-        config: {
-            responseModalities: [Modality.IMAGE],
-        },
-    });
-    return response.candidates?.[0]?.content?.parts[0]?.inlineData?.data ?? null;
-};
-
+// FIX: Add generateVideo function for VideoLab component
+type VideoAspectRatio = '16:9' | '9:16';
 export const generateVideo = async (
-    file: File, 
-    prompt: string, 
-    aspectRatio: '16:9' | '9:16',
+    imageFile: File,
+    prompt: string,
+    aspectRatio: VideoAspectRatio,
     onProgress: (status: string) => void
 ): Promise<Blob> => {
-    // Re-create client to ensure it picks up the latest key from the dialog
-    const ai = getAiClient(); 
-    const imageBase64 = await fileToBase64(file);
+    const ai = getAiClient();
 
-    onProgress('Starting video generation operation...');
+    onProgress('Preparando imagem...');
+    const imageBase64 = await fileToBase64(imageFile);
+
+    onProgress('Iniciando a geração de vídeo com o modelo VEO...');
     let operation = await ai.models.generateVideos({
         model: 'veo-3.1-fast-generate-preview',
         prompt: prompt,
         image: {
             imageBytes: imageBase64,
-            mimeType: file.type,
+            mimeType: imageFile.type,
         },
         config: {
             numberOfVideos: 1,
@@ -101,51 +118,51 @@ export const generateVideo = async (
         },
     });
 
-    onProgress('Operation initiated. Waiting for video to process. This may take a few minutes...');
-    let checks = 0;
+    onProgress('Operação iniciada. Aguardando a conclusão...');
     while (!operation.done) {
         await new Promise(resolve => setTimeout(resolve, 10000));
-        checks++;
-        onProgress(`Processing... (Check ${checks})`);
+        onProgress('Verificando o status da geração...');
         operation = await ai.operations.getVideosOperation({ operation: operation });
     }
 
+    onProgress('Geração concluída. Baixando o vídeo...');
     const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) {
-        throw new Error('Video generation finished, but no download link was found.');
+        throw new Error("Falha ao obter o link de download do vídeo.");
+    }
+
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        throw new Error("API_KEY não está configurada no ambiente.");
     }
     
-    onProgress('Video processed. Downloading...');
-    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    const response = await fetch(`${downloadLink}&key=${apiKey}`);
     if (!response.ok) {
-        throw new Error('Failed to download the generated video.');
+        const errorBody = await response.text();
+        if (errorBody.includes("Requested entity was not found")) {
+            throw new Error("A chave de API selecionada não foi encontrada ou é inválida. Por favor, selecione outra chave. Requested entity was not found.");
+        }
+        throw new Error(`Falha ao baixar o vídeo: ${response.statusText}`);
     }
-    onProgress('Download complete!');
-    return response.blob();
+
+    onProgress('Download completo!');
+    const videoBlob = await response.blob();
+    return videoBlob;
 };
 
-
-export const analyzeVideo = async (file: File, prompt: string): Promise<string> => {
-    // IMPORTANT: The current Web SDK for Gemini does not directly support video file uploads for analysis in generateContent.
-    // This function simulates the expected behavior. In a real-world scenario, you would
-    // use a backend service to process the video (e.g., extract frames) and send them to the Gemini API.
-    console.log('Simulating video analysis for file:', file.name);
+// FIX: Add analyzeVideo (simulated) function for VideoLab component
+export const analyzeVideo = async (
+    videoFile: File,
+    prompt: string
+): Promise<string> => {
+    console.log("Análise de vídeo simulada:", { videoFile, prompt });
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Simula o tempo de processamento
     
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-
-    const analysisPrompt = `
-      You are a video analysis expert. A user has uploaded a video and asked the following question: "${prompt}".
-      
-      Since you cannot see the video directly, provide a detailed, hypothetical analysis based on the user's query.
-      Acknowledge that this is a simulated analysis based on the prompt about the unseen video. Respond in Brazilian Portuguese.
-      For example, if the user asks "What are the main colors?", describe a plausible color palette for a video.
-    `;
-
-    const response = await ai.models.generateContent({
-        model,
-        contents: analysisPrompt,
-    });
-
-    return `[Análise Simulada]\n\n${response.text}`;
+    return `**Análise Simulada para "${videoFile.name}"**\n\n` +
+           `Com base no prompt "${prompt}", a IA identificou o seguinte:\n\n` +
+           `- **Quadros Iniciais:** Mostram uma cena urbana ao amanhecer.\n` +
+           `- **Ação Principal:** Um carro vermelho passa rapidamente pela tela da esquerda para a direita entre 2 e 4 segundos.\n` +
+           `- **Objetos Notáveis:** Prédios altos, semáforos e alguns pedestres ao fundo.\n` +
+           `- **Conclusão:** O vídeo parece ser uma filmagem de trânsito em uma cidade grande.\n\n` +
+           `*Nota: Esta é uma análise simulada. A funcionalidade de análise de vídeo real não está implementada.*`;
 };

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { DiamondIcon, LoaderIcon } from './icons';
+import { DiamondIcon, LoaderIcon, GoogleIcon } from './icons';
 import { fileToBase64 } from '../utils/fileUtils';
+import { useAuth } from './AuthContext';
 
 // --- Static PIX Information (Replace with your actual data) ---
 const PIX_KEY = "seu-email-ou-chave-pix-aqui@dominio.com";
@@ -12,19 +13,20 @@ interface BuyDiamondsModalProps {
     isOpen: boolean;
     onClose: () => void;
     onPurchaseComplete: () => void;
-    userId: string;
+    userId?: string;
 }
 
 const packages = [
     { diamonds: 100, price: 29.90, id: 'pkg_100_imagens', name: 'Pacote 10 Imagens' },
 ];
 
-type ModalStep = 'select_package' | 'payment_info' | 'submitted';
+type ModalStep = 'login_required' | 'select_package' | 'payment_info' | 'submitted';
 
 const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, onPurchaseComplete, userId }) => {
+    const { currentUser, login } = useAuth();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [step, setStep] = useState<ModalStep>('select_package');
+    const [step, setStep] = useState<ModalStep>('login_required');
     const [selectedPackage, setSelectedPackage] = useState<(typeof packages)[0] | null>(null);
     const [receiptFile, setReceiptFile] = useState<File | null>(null);
     const [copied, setCopied] = useState(false);
@@ -32,7 +34,7 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
     const resetModalState = () => {
         setIsLoading(false);
         setError(null);
-        setStep('select_package');
+        setStep(currentUser ? 'select_package' : 'login_required');
         setSelectedPackage(null);
         setReceiptFile(null);
         setCopied(false);
@@ -41,12 +43,28 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
     useEffect(() => {
         if (!isOpen) {
             setTimeout(resetModalState, 300);
+        } else {
+             if (!currentUser) {
+                setStep('login_required');
+            } else if (step === 'login_required') {
+                setStep('select_package');
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, currentUser]);
 
     const handleClose = () => {
         if (isLoading) return;
         onClose();
+    };
+    
+    const handleGoogleLogin = () => {
+        // In a real app, this would trigger the Google OAuth flow.
+        // Here, we simulate it with a prompt for demonstration purposes.
+        const name = prompt("SIMULAÇÃO DE LOGIN:\n\nPara continuar, digite seu nome de usuário.");
+        if (name) {
+            login(name);
+            // The useEffect hook will automatically transition the modal to the next step.
+        }
     };
 
     const handleSelectPackage = (pkg: typeof packages[0]) => {
@@ -61,7 +79,7 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
 
     const handleSubmitProof = async () => {
         if (!receiptFile || !selectedPackage || !userId) {
-            setError("Por favor, selecione um pacote e anexe o comprovante.");
+            setError("Por favor, selecione um pacote, anexe o comprovante e esteja logado.");
             return;
         }
         setIsLoading(true);
@@ -105,6 +123,20 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
         }
 
         switch (step) {
+            case 'login_required':
+                 return (
+                    <div className="text-center min-h-[300px] flex flex-col justify-center items-center">
+                        <h3 className="text-xl font-bold text-text-primary mt-4">Conecte-se para Continuar</h3>
+                        <p className="text-text-secondary mt-2 mb-6">Para comprar diamantes e salvar seu progresso, por favor, conecte-se com sua conta.</p>
+                        <button 
+                            onClick={handleGoogleLogin} 
+                            className="w-full bg-white hover:bg-gray-100 text-text-primary font-bold py-3 px-4 rounded-xl shadow-md border border-gray-300 flex items-center justify-center transition-all"
+                        >
+                            <GoogleIcon className="w-6 h-6 mr-3" />
+                            Conectar com Google
+                        </button>
+                    </div>
+                );
             case 'select_package':
                 return (
                     <div className="space-y-4">

@@ -140,11 +140,24 @@ app.post('/api/submit-proof', (req, res) => {
 // [GET] Pega os dados de um usuário específico (incluindo saldo de diamantes)
 app.get('/api/users/:userId', (req, res) => {
     const { userId } = req.params;
-    const user = db.users[userId];
 
+    // Se o usuário não existir, crie-o (simula o primeiro login)
+    if (!db.users[userId]) {
+        console.log(`[SERVER] Novo usuário detectado: ${userId}. Criando entrada no banco de dados.`);
+        db.users[userId] = {
+            // Em um aplicativo real, você pode obter o nome de uma etapa de registro
+            name: `Usuário ${userId.substring(0, 8)}...`,
+            diamonds: 20 // Bônus inicial
+        };
+        saveDB();
+    }
+
+    const user = db.users[userId];
+    
     if (user) {
         res.json(user);
     } else {
+        // Este caso teoricamente não deve ser alcançado devido à verificação acima
         res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 });

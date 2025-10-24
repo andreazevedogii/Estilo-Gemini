@@ -3,18 +3,19 @@ import Header from './components/Header';
 import VirtualTryOn from './components/VirtualTryOn';
 import BuyDiamondsModal from './components/BuyDiamondsModal';
 import axios from 'axios';
+import { useAuth } from './components/AuthContext';
 
 const App: React.FC = () => {
   const [diamondBalance, setDiamondBalance] = useState<number>(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Simulating a logged-in user. In a real app, this would come from an auth context.
-  const [currentUserId] = useState('user_123');
+  const { currentUser } = useAuth();
 
   // Fetch initial and updated balance from the server
   const fetchUserBalance = async () => {
+    if (!currentUser?.id) return;
     try {
-      const response = await axios.get(`/api/users/${currentUserId}`);
+      const response = await axios.get(`/api/users/${currentUser.id}`);
       setDiamondBalance(response.data.diamonds);
     } catch (error) {
       console.error("Failed to fetch user balance:", error);
@@ -24,11 +25,15 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchUserBalance();
-    // Poll for updates every 10 seconds to reflect admin approvals
-    const interval = setInterval(fetchUserBalance, 10000);
-    return () => clearInterval(interval);
-  }, [currentUserId]);
+    if (currentUser?.id) {
+      fetchUserBalance();
+      // Poll for updates every 10 seconds to reflect admin approvals
+      const interval = setInterval(fetchUserBalance, 10000);
+      return () => clearInterval(interval);
+    } else {
+      setDiamondBalance(0); // Reset balance on logout
+    }
+  }, [currentUser?.id]);
 
   const handleSpendDiamonds = (cost: number) => {
     // This is now an optimistic update. The server is the source of truth.
@@ -64,7 +69,7 @@ const App: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onPurchaseComplete={handlePurchaseComplete}
-        userId={currentUserId}
+        userId={currentUser?.id}
       />
     </div>
   );

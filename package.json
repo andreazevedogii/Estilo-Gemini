@@ -1,15 +1,28 @@
 {
-  "name": "gemini-style-backend",
+  "name": "gemini-style-suite",
   "version": "1.0.0",
-  "description": "Backend server for Gemini Style app to handle Abacate Pay payments.",
-  "main": "server.js",
+  "description": "A modern web application that uses Gemini API for virtual clothes try-on, creative generation, and real-time AI assistance.",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server.js"
   },
   "dependencies": {
+    "@google/genai": "^1.26.0",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^4.2.0",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.0"
   }
 }

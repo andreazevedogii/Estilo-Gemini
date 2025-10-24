@@ -54,34 +54,24 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
         setSelectedPackage(pkg);
         
         try {
-            // NOTE: This assumes the backend server from `server.js` is running on localhost:3001
-            const response = await fetch('http://localhost:3001/api/abacatepay/create-payment-link', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    id: pkg.id,
-                    title: pkg.title,
-                    unit_price: pkg.price,
-                    userId: 'user_123', // Using a default user ID for this demonstration
-                }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Erro ${response.status}: Falha ao gerar o código PIX.`);
-            }
-
-            const data = await response.json();
-
+            // SIMULATION: In a real app, you would fetch from your backend here.
+            // We are simulating the delay of a network request.
+            await new Promise(resolve => setTimeout(resolve, 1500));
+    
+            // This is mock data that your backend would typically generate by
+            // calling a payment provider's API (like Abacate Pay).
+            const mockPixData = {
+                qrCode: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADIAQMAAACXljzdAAAABlBMVEX///8AAABVwtN+AAABHklEQVRIx2MYQUAQBgyMIAYwh0B+DzCCGFB+IE4H8nNQPqCE/4CYzUT0eUD8A6TrgXwYyC8A+Z/UPwD596B8PZAvg/kP4EAG8vNA/glI/wP5LSCfGMyfAPkfkP8Fkv8Dkv8Akv+B/E0gvwdk/kP5B0j/H5D/gPxNIL8HZIJgfg/I/4D8D5D/A/L/gfwNIJ8B8gdA/glI/wP5LSCfGMyfAPkfkP8Fkv8Dkv8Akv+B/E0gvwdk/kP5B0j/H5D/gPxNIL8HZIJgfg/I/4D8D5D/A/L/gfwNIJ8B8gdA/glI/wP5LSCfGMyfAPkfkP8Fkv8Dkv8Akv+B/E0gvwdk/kP5B0j/H5D/gPxNIL8HZIJgfg/I/4D8D5D/A/L/gfwNIJ8B8gdA/glI/wP5LSCfGMyfAPkfkP8Fkv8Dkv8Akv+B/E0gvwdk/kP5B0j/H5D/gPxNIL8HZIJgvgMAnHwWJg+p0QcAAAAASUVORK5CYII=',
+                copyPaste: '00020126580014br.gov.bcb.pix0136a6f8b9-1234-4a5b-8c9d-0123456789ab520400005303986540510.005802BR5913Exemplo de Loja6009SAO PAULO62290525-simulated-gemini-style-pix6304ABCD',
+            };
+    
             setPixData({
-                qrCode: data.pixQrCodeBase64,
-                copyPaste: data.pixCopyPaste,
+                qrCode: mockPixData.qrCode,
+                copyPaste: mockPixData.copyPaste,
             });
-
+    
         } catch (err: any) {
-            setError(err.message || 'Ocorreu um erro desconhecido ao se comunicar com o servidor.');
+            setError('Falha ao simular a geração do PIX. Este é um ambiente de demonstração.');
         } finally {
             setIsLoading(false);
         }
@@ -130,7 +120,7 @@ const BuyDiamondsModal: React.FC<BuyDiamondsModalProps> = ({ isOpen, onClose, on
                 </div>
                  <div className="text-sm text-blue-800 bg-blue-100 p-3 rounded-md mt-6 text-left">
                     <p className="font-semibold">Aviso do Desenvolvedor:</p>
-                    <p className="text-xs mt-1">Neste ambiente, o servidor da Abacate Pay não pode notificar nosso servidor local sobre o pagamento. Clique no botão abaixo para simular a confirmação e receber seus diamantes.</p>
+                    <p className="text-xs mt-1">Para fins de demonstração, a geração de PIX e a comunicação com o servidor de pagamentos foram simuladas. O QR Code e a chave são fictícios. Clique no botão abaixo para simular um pagamento bem-sucedido e receber seus diamantes.</p>
                  </div>
                  <button 
                     onClick={handleSimulateConfirmation}
